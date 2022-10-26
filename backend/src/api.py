@@ -12,6 +12,18 @@ setup_db(app)
 CORS(app)
 
 db_drop_and_create_all()
+@app.after_request
+def after_request(response):
+    response.headers.add(
+                'Allow-Control-Allow-Headers',
+                'Content-Type,Authorization,true'
+                )
+    response.headers.add(
+                'Allow-Control-Allow-Methods',
+                'GET, POST, PATCH, DELETE, OPTIONS'
+                )
+
+    return response
 
 '''
 @TODO uncomment the following line to initialize the datbase
@@ -62,27 +74,33 @@ def get_drinks_details(jwt):
 
 @app.route('/drinks', methods=['POST'])
 @requires_auth('post:drinks')
-def create_drink(payload):
-    body = request.get_json()
-    title = body.get('title', None)
-    recipe = body.get('recipe', None)
+def create_drinks(jwt):
+    data = request.get_json()
+    
+    if data is None:
+        abort(400)
 
-    if (title == ""):
+    title = data.get('title', None)
+    recipe = data.get('recipe', None)
+    
+    if (title is None) or (recipe is None):
+        abort(400)
+
+    if not isinstance(recipe, list):
         abort(422)
 
+    drinks = Drink(title=title, recipe=json.dumps(recipe))
+    
     try:
-        new_drink = Drink(title=title, recipe=json.dumps(recipe))
-        new_drink.insert()
-        drinks = Drink.query.order_by(Drink.id.desc()).all()
-        drinks = [drink.long() for drink in drinks]
-
-    except:
+        drinks.insert()
+    except Exception:
         abort(422)
 
     return jsonify({
         'success': True,
-        'drinks': drinks
+        'drinks': [drinks.long()]
     }), 200
+
 
 
 
@@ -101,26 +119,27 @@ def create_drink(payload):
 @app.route('/drinks/<int:id>', methods=['PATCH'])
 @requires_auth('patch:drinks')
 def update_drink(payload, id):
-    req = request.get_json()
-    drink = Drink.query.filter(Drink.id == id).one_or_none()
+    
+    data = request.get_json()
+    drinks = Drink.query.filter(Drink.id == id).one_or_none()
 
-    if not drink:
+    if not drinks:
         abort(404)
 
     try:
-        req_title = req.get('title')
-        req_recipe = req.get('recipe')
-        if req_title:
-            drink.title = req_title
+        title = data.get('title')
+        recipe = data.get('recipe')
+        if title:
+            drinks.title = title
 
-        if req_recipe:
-            drink.recipe = json.dumps(req['recipe'])
+        if recipe:
+            drinks.recipe = json.dumps(drinks['recipe'])
 
-        drink.update()
+        drinks.update()
     except BaseException:
         abort(400)
 
-    return jsonify({'success': True, 'drinks': [drink.long()]}), 200
+    return jsonify({'success': True, 'drinks': [drinks.long()]}), 200
 
 '''
 @TODO implement endpoint
@@ -133,6 +152,18 @@ def update_drink(payload, id):
         or appropriate status code indicating reason for failure
 '''
 
+@app.route('/drinks/<int:id>', methods=['DELETE'])
+@requires_auth('delete:drinks')
+def delete_drink(payload, id):
+    drinks = Drink.query.filter(Drink.id == id).one_or_none()
+    if not drinks:
+        abort(404)
+    try:
+        drinks.delete()
+    except Exception:
+        abort(400)
+
+    return jsonify({'success': True, 'delete': id}), 200
 
 # Error Handling
 '''
@@ -185,24 +216,3 @@ def invalid_method(error):
     }), 405
 
 
-'''
-@TODO implement error handlers using the @app.errorhandler(error) decorator
-    each error handler should return (with approprate messages):
-             jsonify({
-                    "success": False,
-                    "error": 404,
-                    "message": "resource not found"
-                    }), 404
-
-'''
-
-'''
-@TODO implement error handler for 404
-    error handler should conform to general task above
-'''
-
-
-'''
-@TODO implement error handler for AuthError
-    error handler should conform to general task above
-'''
